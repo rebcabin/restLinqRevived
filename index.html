@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>RESTLinq Revived</title>
+    <script type="text/javascript" src="scripts/jquery-1.5.1.js"></script>
+    <script type="text/javascript" src="scripts/Vector2.js"></script>
+    <script type="text/javascript" src="scripts/Vector3.js"></script>
+    <script type="text/javascript" src="scripts/Vector4.js"></script>
+    <script type="text/javascript" src="scripts/Matrix4x4.js"></script>
+    <script type="text/javascript" src="scripts/Quaternion.js"></script>
+    <script type="text/javascript" src="scripts/MathHelper.js"></script>
+    <script type="text/javascript" src="scripts/Parametric.js"></script>
+    <script type="text/javascript" src="scripts/Ray.js"></script>
+    <script type="text/javascript" src="scripts/rmlCore.js"></script>
+    <script type="text/javascript" src="scripts/rmlTypes.js"></script>
+    <script type="text/javascript" src="scripts/rmlGraph.js"></script>
+    <!-- <script type="text/javascript" src="scripts/rmlTest.js"></script> -->
+    <script type="text/javascript" src="scripts/levenshtein.js"></script>
+    <script> window.Seadragon = {}; </script>
+    <script src="scripts/seadragon-dev.js"></script>
+    <script src="scripts/seajax-tilesource-old.js"></script>
+    <script type="text/javascript"
+            src="http://localhost:8000/socket.io/socket.io.js"></script>
+  
+    <script type="text/javascript" src="RXjS/rx.js"></script>
+    <script type="text/javascript" src="RXjS/rx.time.js"></script>
+    <script src="scripts/uiManagement.js"></script>
+
+
+    <LINK REL=StyleSheet HREF="scripts/client.css" TYPE="text/css" MEDIA=screen>
+
+  <script type="text/javascript">
+    var Observable = Rx.Observable;
+    var Observer   = Rx.Observer;
+    var socket = io.connect('http://localhost:8000');
+
+    var categoryFilter =
+        '.where(function(entity) {' +
+            'return entity !== undefined && entity.Category !== undefined;})';
+
+    var categorySelector =
+        '.select(function(entity) {return entity;})';
+  
+    var entityAttributesQuery =
+        '.selectmany(function(entity) {return entity.Attributes;})';
+  
+    var categorySelectorQuery =
+        '.where(function(attribute) {return attribute.Key === "Category";})';
+
+    var valueTransformQuery =
+        '.select(function(category) {return JSON.parse(category.Value);})';
+            
+    var distinctifyingQuery = '.distinct()';
+
+    var orderingQuery = '.orderBy(function(category) {return category})';
+            
+    var entityProcessingChain = 
+        categoryFilter
+        // + categorySelector 
+        // + entityAttributesQuery
+        // + categorySelectorQuery 
+        // + valueTransformQuery 
+        // + distinctifyingQuery 
+        // + orderingQuery
+        ;
+                
+    function ClearEntities() {
+        if (RMLentitiesOnDisplay.length > 0) {
+            console.log('REMOVING ENTITIES',
+                RMLentitiesOnDisplay.map(function (e) { return e.id }));
+            RMLentitiesOnDisplay.forEach(function (e) { RML.Remove(e); });
+            RMLentitiesOnDisplay = [];
+        }
+    };
+
+    var linqInjectionProxyObserver = Observer.create(
+        // onNext =
+        function (payload) {
+            if (socket) {
+                socket.emit(
+                    'linq injection',
+                    { "QueryKind": "LinqInjection"
+                    , "Vulnerability": "DenialOfService"
+                    , "QueryTerms": payload
+                    });
+            }
+        });
+
+    function InjectCategoryFilter(str) {
+        console.log('INJECT CATEGORY FILTER');
+        ClearEntities();
+        linqInjectionProxyObserver.onNext(categoryFilter);
+
+    }
+    
+    function SetCategoryFilter(str) 
+    {   console.log('SetCategoryFilter', str);
+        categoryFilter = str; 
+        return str;
+    }
+
+    function DisplayCategoryFilter(str)
+    {
+        var foo = document.getElementById('theQuery');
+        if (foo) {
+            var innerhtml = '<pre><big><strong>' + str;
+            var count = 100 - str.length;
+            var spaces = '';
+            for (var i = 0; i < count; i++) { spaces += ' '; }
+            foo.innerHTML = innerhtml + spaces + '</strong></big></pre>';
+        }
+    }
+    
+    function BuildCategoryFilter(str) 
+    {   console.log('BuildCategoryFilter', str);
+        var entitiesExist =
+            '.where(function(ent){return ent !== undefined;})';
+                            
+        var categoriesExist =
+            '.where(function(ent){return ent.Category !== undefined;})';
+                            
+        var categoryMatch =
+            '.where(function(ent){return /'+str+'/.test(ent.Category.toLowerCase());})';
+        DisplayCategoryFilter(categoryMatch);
+                                
+        return entitiesExist + categoriesExist + categoryMatch;
+    }
+    
+    function NeutralCategoryFilter(str)
+    {   DisplayCategoryFilter("");
+        return ".where(function(entity){return entity !== undefined;})";
+    }
+
+    var RMLentitiesOnDisplay = [];
+    
+    // ================================================================
+    // Observers section
+    //   These observe the server.
+    // ================================================================
+    
+    var serverEntityObservable = Observable.create(
+        // subscribe
+        function (observer) {
+            var handler = function (entities) {
+                observer.onNext(entities);
+            };
+            socket.on('entities', handler);
+            return function () {
+                // socket.off('entities', handler);
+            };
+        });
+
+    var serverEntityDisposable = serverEntityObservable.subscribe(
+        // onNext 
+        function (entities) {
+            console.log('RECEIVED ENTITIES FROM SERVER', entities.map(
+                function (e) {return e.Name;}));
+            ClearEntities();
+            toRML(entities);
+        });
+
+    // ================================================================
+    // Location observable
+    //     a.k.a. bounding-box observable
+    // ================================================================
+
+    var locationMockObservable = Observable.generateWithRelativeTime(
+        1 /* initial state */,
+        function (x) { return x > 0; } /* condition */,
+        function (x) { return x + 1; } /* iterate */,
+        function (x) { return x; } /* result selector */,
+        function (x) { return 1000; } /* time selector */,
+        Rx.timeoutScheduler);
+
+    // The OBSERVER we're subscribing here is a socket.io proxy
+    // for the real observer, which resides on the middle tier.
+    locationMockObservable
+        // filter the observable using LINQ Operators:
+        // .throttle(250)
+        // .where(function(tick) {return tick % 2 == 0;})
+        .subscribe(
+            function (tick) {
+                socket.emit('bounding box', 
+                {   "clientTick": tick,
+                    // bounding box from the UI -- 
+                    "lowerLeftLon": RML.viewBox.x, //-81.5,
+                    "lowerLeftLat": RML.viewBox.y, //40.5,
+                    "upperRightLon":RML.viewBox.z, // -80.0,
+                    "upperRightLat":RML.viewBox.w // 41.5
+                })
+            });
+
+    InjectCategoryFilter(SetCategoryFilter(NeutralCategoryFilter()));        
+
+  </script>
+</head>
+<body onload="init();" oncontextmenu="return false;">   
+   <div style="z-index: 1; position: absolute"> 
+    <form class="shadowtext" action="" method="">
+        <input class="shadowtext" 
+            onclick="InjectCategoryFilter(SetCategoryFilter(NeutralCategoryFilter()));"
+            type="radio" 
+            name="categoryRadio" 
+            value="restaurant" 
+            checked="checked">
+            <big><strong>Any Restaurant</strong></big><br/>
+        </input>
+        <input class="shadowtext" 
+            onclick="InjectCategoryFilter(SetCategoryFilter(BuildCategoryFilter('italian')));" 
+            type="radio" 
+            name="categoryRadio" 
+            value="italian">
+            <big><strong>Italian</strong></big><br/>
+        </input>
+        <input class="shadowtext" 
+            onclick="InjectCategoryFilter(SetCategoryFilter(BuildCategoryFilter('steak')));" 
+            type="radio" 
+            name="categoryRadio" 
+            value="steak">
+            <big><strong>Steak</strong></big><br/>
+        </input>
+        <input class="shadowtext" 
+            onclick="InjectCategoryFilter(SetCategoryFilter(BuildCategoryFilter('american')));" 
+            type="radio" 
+            name="categoryRadio" 
+            value="american">
+            <big><strong>American</strong></big><br/>
+        </input>
+        <input class="shadowtext" 
+            onclick="InjectCategoryFilter(SetCategoryFilter(BuildCategoryFilter('french')));" 
+            type="radio" 
+            name="categoryRadio" 
+            value="french">
+            <big><strong>French</strong></big><br/>
+        </input>
+        <input class="shadowtext" 
+            onclick="InjectCategoryFilter(SetCategoryFilter(BuildCategoryFilter('pizza')));" 
+            type="radio" 
+            name="categoryRadio" 
+            value="pizza">
+            <big><strong>Pizza</strong></big><br/>
+        </input>
+        <input class="shadowtext" 
+            onclick="InjectCategoryFilter(SetCategoryFilter(BuildCategoryFilter('chinese')));" 
+            type="radio" 
+            name="categoryRadio" 
+            value="chinese">
+            <big><strong>Chinese Food</strong></big><br/>
+        </input>
+        <input class="shadowtext" 
+            onclick="InjectCategoryFilter(SetCategoryFilter(BuildCategoryFilter('mexican')));" 
+            type="radio" 
+            name="categoryRadio" 
+            value="mexican">
+            <big><strong>Mexican Food</strong></big><br/>
+        </input>
+        <input class="shadowtext" 
+            onclick="InjectCategoryFilter(SetCategoryFilter(BuildCategoryFilter('burger')))" 
+            type="radio" 
+            name="categoryRadio" 
+            value="burger">
+            <big><strong>Burgers &amp; Fries</strong></big><br/>
+        </input>
+    </form>
+   </div>
+
+    <div 
+        class="shadowtext" 
+        id="theQuery" 
+        style = "z-index: 1; position: absolute; top: 30px; left: 170px">
+    </div>
+
+    <div id="container"> 
+    </div>
+
+   <div>
+      <div class="shadowtext" id="debugText">1sdfsdfsdfsdf</div>
+   </div>
+
+   <div style="float: bottom; width: 1024; padding: 10px; height: 30px; background: #e0f0b0;">
+        <input type=checkbox id="autoMatch">Auto Match</INPUT>
+        &nbsp;&nbsp;<input type="password" NAME="writeKey">Write Key</INPUT>
+        &nbsp;&nbsp;<input type="text" NAME="moveRadius">MoveRadius</INPUT>
+        &nbsp;&nbsp;<input type="text" NAME="moveEnergy">MoveEnergy</INPUT>
+        <button id="sendEdited" style="float: right" >Send Edited RML</button> 
+   </div>
+   <div style="float: bottom; width: 1024; height: 404px; background: #e0f0b0;">
+       <textarea id="sendText"
+         style="width: 512px; height: 400px; font-size: 8pt; overflow: auto;">
+            loading...
+       </textarea>
+       <textarea id="entityText"
+         style="float: right; width: 500px; height: 400px; font-size: 8pt; overflow: auto;">
+            loading...
+       </textarea>
+    </div>
+</body>
+</html>

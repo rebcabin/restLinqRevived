@@ -53,10 +53,10 @@ var traditionalSocketConnectionCallback =
         var boundingBoxDisposable = boundingBoxObservable.subscribe(
             // onNext =
             function (payload) {
-                // console.log('BOUNDING-BOX PAYLOAD');
-                // sys.log([
-                //     [payload.lowerLeftLon, payload.lowerLeftLat],
-                //     [payload.upperRightLon, payload.upperRightLat]]);
+                console.log('BOUNDING-BOX PAYLOAD');
+                sys.log([
+                    [payload.lowerLeftLon, payload.lowerLeftLat],
+                    [payload.upperRightLon, payload.upperRightLat]]);
             });
 
         var clientEntityObserver = Observer.create(

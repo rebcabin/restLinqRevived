@@ -147,7 +147,7 @@
             };
             socket.on('entities', handler);
             return function () {
-                // socket.off('entities', handler);
+                socket.off('entities', handler);
             };
         });
 
@@ -181,14 +181,14 @@
         // .where(function(tick) {return tick % 2 == 0;})
         .subscribe(
             function (tick) {
-                socket.emit('bounding box', 
-                {   "clientTick": tick,
-                    // bounding box from the UI -- 
-                    "lowerLeftLon": RML.viewBox.x, //-81.5,
-                    "lowerLeftLat": RML.viewBox.y, //40.5,
-                    "upperRightLon":RML.viewBox.z, // -80.0,
-                    "upperRightLat":RML.viewBox.w // 41.5
-                })
+                // socket.emit('bounding box', 
+                // {   "clientTick": tick,
+                //     // bounding box from the UI -- 
+                //     "lowerLeftLon": RML.viewBox.x, //-81.5,
+                //     "lowerLeftLat": RML.viewBox.y, //40.5,
+                //     "upperRightLon":RML.viewBox.z, // -80.0,
+                //     "upperRightLat":RML.viewBox.w // 41.5
+               //  })
             });
 
     InjectCategoryFilter(SetCategoryFilter(NeutralCategoryFilter()));        
